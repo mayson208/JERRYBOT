@@ -1,6 +1,6 @@
 # JERRY — Personal AI Assistant
 
-> Your own JARVIS. Responds to your voice, controls your PC, remembers everything, and actually has personality.
+> Your own personal AI companion. Responds to your voice, controls your PC, remembers everything, and actually has personality.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2011-lightgrey)
