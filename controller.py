@@ -8,6 +8,7 @@ game launching (Steam/Ubisoft/Epic/EA), volume control, screenshots.
 import os
 import re
 import subprocess
+import threading
 import webbrowser
 import winreg
 from datetime import datetime
@@ -16,6 +17,26 @@ from pathlib import Path
 import pyautogui
 
 import config
+
+# ── Command History ─────────────────────────────────────────────────────────────
+_command_history: list[dict] = []
+_HISTORY_MAX = 20
+
+
+def record_command(command: str, result: str = ""):
+    """Record a command to the in-session history."""
+    _command_history.append({
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "command": command,
+        "result": result,
+    })
+    if len(_command_history) > _HISTORY_MAX:
+        _command_history.pop(0)
+
+
+def get_command_history() -> list[dict]:
+    """Return the last N commands executed this session."""
+    return list(_command_history)
 
 # ── App path lookup ───────────────────────────────────────────────────────────
 
@@ -103,7 +124,29 @@ def take_screenshot() -> str:
     filename = f"jerry_screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     filepath = desktop / filename
     pyautogui.screenshot(str(filepath))
+    record_command("screenshot", str(filepath))
     return str(filepath)
+
+
+def set_timer(minutes: float, callback=None):
+    """Start a countdown timer. Calls callback(minutes) when done (runs in a thread).
+
+    Args:
+        minutes: Duration in minutes.
+        callback: Optional callable to invoke when the timer fires.
+                  Receives the original minutes value as an argument.
+    """
+    def _run():
+        import time
+        time.sleep(minutes * 60)
+        if callback:
+            callback(minutes)
+        record_command(f"timer:{minutes}m", "fired")
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    record_command(f"set_timer:{minutes}m", "started")
+    return t
 
 
 # ── Game Launching ─────────────────────────────────────────────────────────────
@@ -348,4 +391,19 @@ def execute_action(action_tag: str) -> str | None:
         app = parts[1]
         mute_app(app)
 
+    elif cmd == "timer" and len(parts) >= 2:
+        try:
+            minutes = float(parts[1])
+            return f"TIMER:{minutes}"  # main.py handles the callback to speak when done
+        except ValueError:
+            pass
+
+    elif cmd == "history":
+        history = get_command_history()
+        if not history:
+            return "No commands recorded yet this session."
+        lines = [f"{h['timestamp']} — {h['command']}" for h in history[-10:]]
+        return "Recent commands:\n" + "\n".join(lines)
+
+    record_command(action_tag)
     return None

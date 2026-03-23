@@ -167,6 +167,62 @@ class Brain:
         )
         return response.content[0].text
 
+    def save_conversation(self, filename: str = None) -> str:
+        """Export the full conversation to a timestamped text file on the Desktop.
+
+        Args:
+            filename: Optional custom filename. Defaults to timestamped name.
+
+        Returns:
+            Path to the saved file.
+        """
+        if not filename:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"jerry_conversation_{ts}.txt"
+        out_path = Path.home() / "Desktop" / filename
+        lines = []
+        for msg in self.messages:
+            role = "Rachel" if msg["role"] == "user" else "JERRY"
+            lines.append(f"[{role}] {msg['content']}\n")
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+        return str(out_path)
+
+    def summarize_old_messages(self):
+        """If history is long, compress the oldest messages into a summary to save tokens.
+
+        Keeps the 10 most recent exchanges untouched and summarizes everything before that.
+        """
+        # Only summarize when we have more than 30 messages (15 exchanges)
+        if len(self.messages) <= 30:
+            return
+
+        keep_recent = 20  # keep the last 10 exchanges verbatim
+        old_messages = self.messages[:-keep_recent]
+        recent_messages = self.messages[-keep_recent:]
+
+        old_text = "\n".join(
+            f"{m['role'].upper()}: {m['content'][:200]}" for m in old_messages
+        )
+        summary_prompt = (
+            f"Summarize this conversation history in 3-5 bullet points so JERRY "
+            f"can remember the key topics, facts about {config.USER_NAME}, and decisions made:\n\n{old_text}"
+        )
+        try:
+            response = self.client.messages.create(
+                model=config.AI_MODEL,
+                max_tokens=300,
+                messages=[{"role": "user", "content": summary_prompt}],
+            )
+            summary = response.content[0].text
+            summary_message = {
+                "role": "user",
+                "content": f"[MEMORY SUMMARY — earlier in this conversation]: {summary}",
+            }
+            self.messages = [summary_message] + recent_messages
+            save_memory(self.messages)
+        except Exception:
+            pass  # If summarization fails, keep original messages
+
     def clear_memory(self):
         """Wipe conversation history."""
         self.messages = []
