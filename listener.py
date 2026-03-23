@@ -63,20 +63,25 @@ class Listener:
             self.on_error("pvporcupine not installed. Run: pip install pvporcupine")
             return
 
+        # Custom wake word: place hey_jerry.ppn (from console.picovoice.ai) in project root.
+        # Without a .ppn file, falls back to the built-in "bumblebee" keyword.
+        ppn_path = Path(__file__).parent / "hey_jerry.ppn"
         try:
-            porcupine = pvporcupine.create(
-                access_key=config.PORCUPINE_ACCESS_KEY,
-                keywords=["hey siri"],   # closest built-in; see note below
-            )
+            if ppn_path.exists():
+                porcupine = pvporcupine.create(
+                    access_key=config.PORCUPINE_ACCESS_KEY,
+                    keyword_paths=[str(ppn_path)],
+                )
+                print(f"[Listener] Using custom wake word model: {ppn_path.name}")
+            else:
+                porcupine = pvporcupine.create(
+                    access_key=config.PORCUPINE_ACCESS_KEY,
+                    keywords=["bumblebee"],  # built-in stand-in until hey_jerry.ppn is ready
+                )
+                print("[Listener] hey_jerry.ppn not found — using 'bumblebee' as stand-in")
         except Exception as e:
             self.on_error(f"Porcupine init error: {e}")
             return
-
-        # NOTE: Picovoice free tier has built-in keywords like "hey siri", "alexa", "ok google",
-        # "porcupine", "bumblebee", "blueberry", "grapefruit", "grasshopper", "americano".
-        # For a custom "Hey Jerry" wake word you need a custom .ppn model from console.picovoice.ai.
-        # By default we use "bumblebee" as a stand-in — change to your custom .ppn file path.
-        # To use custom model: pvporcupine.create(access_key=..., keyword_paths=["hey_jerry.ppn"])
 
         audio = pyaudio.PyAudio()
         stream = audio.open(
@@ -119,7 +124,7 @@ class Listener:
 
         frames = []
         silent_chunks = 0
-        max_silent_chunks = 20   # ~1.3s of silence stops recording
+        max_silent_chunks = int(config.SAMPLE_RATE / 1024 * 1.3)  # ~1.3s of silence
         max_chunks = int(config.SAMPLE_RATE / 1024 * config.RECORD_SECONDS)
 
         for _ in range(max_chunks):
