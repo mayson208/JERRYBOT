@@ -47,37 +47,53 @@ def _speak_worker(text: str, on_start=None, on_done=None):
         if on_start:
             on_start()
         try:
-            from elevenlabs import ElevenLabs
-            client = ElevenLabs(api_key=config.ELEVENLABS_API_KEY)
-
-            audio_generator = client.text_to_speech.convert(
-                voice_id=config.ELEVENLABS_VOICE_ID,
-                text=text,
-                model_id="eleven_monolingual_v1",
-                voice_settings={
-                    "stability": 0.4,
-                    "similarity_boost": 0.85,
-                    "style": 0.3,
-                    "use_speaker_boost": True,
-                },
-            )
-
-            # Collect all audio bytes from the generator
-            audio_bytes = b"".join(audio_generator)
-
-            audio_file = io.BytesIO(audio_bytes)
-            pygame.mixer.music.load(audio_file)
-            pygame.mixer.music.play()
-
-            while pygame.mixer.music.get_busy():
-                pygame.time.wait(100)
-
+            if config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID:
+                _speak_elevenlabs(text)
+            else:
+                _speak_system_fallback(text)
         except Exception as e:
             print(f"[Voice] TTS error: {e}")
+            _speak_system_fallback(text)
         finally:
             _speaking = False
             if on_done:
                 on_done()
+
+
+def _speak_elevenlabs(text: str):
+    """Play audio via ElevenLabs TTS."""
+    from elevenlabs import ElevenLabs
+    client = ElevenLabs(api_key=config.ELEVENLABS_API_KEY)
+    audio_generator = client.text_to_speech.convert(
+        voice_id=config.ELEVENLABS_VOICE_ID,
+        text=text,
+        model_id="eleven_monolingual_v1",
+        voice_settings={
+            "stability": 0.4,
+            "similarity_boost": 0.85,
+            "style": 0.3,
+            "use_speaker_boost": True,
+        },
+    )
+    audio_bytes = b"".join(audio_generator)
+    audio_file = io.BytesIO(audio_bytes)
+    pygame.mixer.music.load(audio_file)
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():
+        pygame.time.wait(100)
+
+
+def _speak_system_fallback(text: str):
+    """Fallback TTS using Windows SAPI (pyttsx3) when ElevenLabs is unavailable."""
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 175)
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as e:
+        print(f"[Voice] Fallback TTS also failed: {e}")
 
 
 def stop():
